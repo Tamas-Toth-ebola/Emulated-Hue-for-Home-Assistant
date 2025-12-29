@@ -27,16 +27,20 @@ class Controller:
 
 
 class EntityState(BaseModel):
-    """Store device state."""
+    """
+    Store device state.
+    Note: Types are set to float/tuple[float] to support Pydantic V2 validation
+    when Home Assistant sends decimal values (e.g. brightness: 85.19).
+    """
 
     power_state: bool = True
     reachable: bool = True
     transition_seconds: float | None = None
-    brightness: int | None = None
-    color_temp: int | None = None
-    hue_saturation: tuple[int, int] | None = None
+    brightness: float | None = None
+    color_temp: float | None = None
+    hue_saturation: tuple[float, float] | None = None
     xy_color: tuple[float, float] | None = None
-    rgb_color: tuple[int, int, int] | None = None
+    rgb_color: tuple[float, float, float] | None = None
     flash_state: str | None = None
     effect: str | None = None
     color_mode: str | None = None
@@ -95,10 +99,12 @@ class EntityState(BaseModel):
             return EntityState()
 
         save_state = {}
-        for state in list(vars(cls).get("__fields__")):
-            if state in save_state:
+        fields = getattr(cls, "__fields__", {}) or getattr(cls, "model_fields", {})
+        for state in list(fields):
+            if state in states:
                 save_state[state] = states[state]
         return EntityState(**save_state)
 
 
-ALL_STATES: list = list(vars(EntityState).get("__fields__"))
+fields = getattr(EntityState, "__fields__", {}) or getattr(EntityState, "model_fields", {})
+ALL_STATES: list = list(fields)

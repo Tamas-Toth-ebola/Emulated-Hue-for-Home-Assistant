@@ -50,13 +50,19 @@ class Config:
         self._link_mode_enabled = False
         self._link_mode_discovery_key = None
 
+        # Feature: Force Link Mode via environment variable.
+        # Allows pairing without interactive confirmation in Home Assistant.
+        self._force_link_mode = os.getenv("EMULATED_HUE_FORCE_LINK_MODE", "false").lower() == "true"
+        if self._force_link_mode:
+            LOGGER.info("Force Link Mode is ENABLED via environment variable.")
+
         # Get the IP address that will be passed to during discovery
         self._ip_addr = get_local_ip()
         LOGGER.info("Auto detected listen IP address is %s", self.ip_addr)
 
         # Feature: Advertise IP Override.
         # If EMULATED_HUE_ADVERTISE_IP is set in environment, use it for discovery (SSDP/description.xml).
-        # Useful when running in Docker bridge mode.
+        # Essential when running in Docker bridge mode to advertise the Host LAN IP.
         self._advertise_ip = os.getenv("EMULATED_HUE_ADVERTISE_IP", self._ip_addr)
         if self._advertise_ip != self._ip_addr:
             LOGGER.info("Using EMULATED_HUE_ADVERTISE_IP override: %s", self._advertise_ip)
@@ -159,7 +165,7 @@ class Config:
     @property
     def link_mode_enabled(self) -> bool:
         """Return state of link mode."""
-        return self._link_mode_enabled
+        return self._link_mode_enabled or self._force_link_mode
 
     @property
     def link_mode_discovery_key(self) -> str | None:
@@ -427,7 +433,7 @@ class Config:
         # create persistent notification in hass
         # user can click the link in the notification to enable linking
 
-        url = f"http://{self.ip_addr}/link/{self._link_mode_discovery_key}"
+        url = f"http://{self.advertise_ip}/link/{self._link_mode_discovery_key}"
         msg = "Click the link below to enable pairing mode on the virtual bridge:\n\n"
         msg += f"**[Enable link mode]({url})**"
 

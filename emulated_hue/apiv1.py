@@ -95,9 +95,14 @@ class HueApiV1Endpoints:
 
     @property
     def route(self):
-        """Return routes for external access."""
+        """
+        Return routes for external access.
+        Note: Manual routes for /api and /api/ are added to support clients
+        that inconsistently append a trailing slash.
+        """
         if not len(routes):
             routes.add_manual_route("GET", "/api", self.async_unknown_request)
+            routes.add_manual_route("GET", "/api/", self.async_unknown_request)
             # add class routes
             routes.add_class_routes(self)
             # Add catch-all handler for unknown requests to api
@@ -109,9 +114,14 @@ class HueApiV1Endpoints:
         pass
 
     @routes.post("/api")
+    @routes.post("/api/")
     @check_request(False)
     async def async_post_auth(self, request: web.Request, request_data: dict):
-        """Handle requests to create a username for the emulated hue bridge."""
+        """
+        Handle requests to create a username for the emulated hue bridge.
+        Improved logic: Existing clients are prioritized to avoid redundant 
+        link button notifications and race conditions.
+        """
         if "devicetype" not in request_data:
             LOGGER.warning("devicetype not specified")
             # custom error message
@@ -121,10 +131,24 @@ class HueApiV1Endpoints:
             return send_error_response(
                 request.path, "Pairing with Home Assistant is explicitly disabled", 901
             )
+
+        # Check if user already exists. 
+        # Crucial for Harmony Hub to reconnect without re-pairing if Bridge ID is stable.
+        all_users = await self.ctl.config_instance.async_get_users()
+        for user_details in all_users.values():
+            if user_details["name"] == request_data["devicetype"]:
+                response = [{"success": {"username": user_details["username"]}}]
+                if request_data.get("generateclientkey"):
+                    response[0]["success"]["clientkey"] = user_details["clientkey"]
+                LOGGER.info("Existing client %s authenticated", user_details["name"])
+                return send_json_response(response)
+
         if not self.ctl.config_instance.link_mode_enabled:
+            LOGGER.debug("Link mode disabled, sending 101 and creating notification")
             await self.ctl.config_instance.async_enable_link_mode_discovery()
             return send_error_response(request.path, "link button not pressed", 101)
 
+        LOGGER.info("Link mode is ENABLED. Creating user for devicetype: %s", request_data["devicetype"])
         userdetails = await self.ctl.config_instance.async_create_user(
             request_data["devicetype"]
         )
@@ -132,7 +156,7 @@ class HueApiV1Endpoints:
         if request_data.get("generateclientkey"):
             response[0]["success"]["clientkey"] = userdetails["clientkey"]
         LOGGER.info("Client %s registered", userdetails["name"])
-        await self.ctl.config_instance.async_disable_link_mode()
+        # Notification is dismissed, but link mode stays active for the remainder of its duration.
         self.ctl.loop.create_task(
             self.ctl.config_instance.async_disable_link_mode_discovery()
         )
@@ -754,9 +778,14 @@ class HueApiV1Endpoints:
                 )
                 return
 
-            current_state[const.HUE_ATTR_COLORMODE] = convert_color_mode(
-                device.color_mode, const.HASS
-            )
+            # Safety check: Ensure device has color_mode attribute (non-light entities like covers don't).
+            if hasattr(device, "color_mode"):
+                current_state[const.HUE_ATTR_COLORMODE] = convert_color_mode(
+                    device.color_mode, const.HASS
+                )
+            else:
+                current_state[const.HUE_ATTR_COLORMODE] = "xy"
+
             # Extended Color light (Zigbee Device ID: 0x0210)
             # Same as Color light, but which supports additional setting of color temperature
             retval.update(
@@ -929,8 +958,8 @@ class HueApiV1Endpoints:
             result.update(
                 {
                     "linkbutton": self.ctl.config_instance.link_mode_enabled,
-                    "ipaddress": self.ctl.config_instance.ip_addr,
-                    "gateway": self.ctl.config_instance.ip_addr,
+                    "ipaddress": self.ctl.config_instance.advertise_ip,
+                    "gateway": self.ctl.config_instance.advertise_ip,
                     "UTC": datetime.datetime.utcnow().isoformat().split(".")[0],
                     "localtime": datetime.datetime.now().isoformat().split(".")[0],
                     "timezone": self.ctl.config_instance.get_storage_value(
