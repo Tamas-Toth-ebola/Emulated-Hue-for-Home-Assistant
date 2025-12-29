@@ -7,7 +7,15 @@ from datetime import datetime
 from typing import Any
 
 from emulated_hue import const
-from emulated_hue.const import ENTERTAINMENT_UPDATE_STATE_UPDATE_RATE
+from emulated_hue.const import (
+    ENTERTAINMENT_UPDATE_STATE_UPDATE_RATE,
+    HASS_ATTR_CURRENT_POSITION,
+    HASS_ATTR_POSITION,
+    HASS_DOMAIN_COVER,
+    HASS_SERVICE_CLOSE_COVER,
+    HASS_SERVICE_OPEN_COVER,
+    HASS_SERVICE_SET_COVER_POSITION,
+)
 from emulated_hue.utils import clamp
 
 from .models import ALL_STATES, Controller, EntityState
@@ -545,6 +553,83 @@ class RGBWWDevice(CTDevice, RGBDevice):
         return RGBDevice._update_device_state(self, existing_state)
 
 
+class CoverDevice(BrightnessDevice):
+    """
+    CoverDevice class.
+
+    Maps Cover entities to Hue Lights.
+    - On/Off -> Open/Close
+    - Brightness (0-255) -> Position (0-100)
+      - Brightness 255 = Open (100%)
+      - Brightness 0 = Closed (0%)
+    """
+
+    # Override
+    def _update_device_state(
+        self, existing_state: EntityState | None = None
+    ) -> EntityState:
+        """Update EntityState object."""
+        # Call OnOffDevice implementation to set basic availability/power state
+        # We skip BrightnessDevice implementation as it looks for brightness attribute
+        existing_state = OnOffDevice._update_device_state(self, existing_state)
+
+        current_pos = self._hass_state_dict.get(const.HASS_ATTR, {}).get(
+            const.HASS_ATTR_CURRENT_POSITION
+        )
+
+        # If no position data, infer from state
+        if current_pos is None:
+            if self._hass_state_dict["state"] == "closed":
+                current_pos = 0
+            else:
+                # assume open means 100% or use last known? using 100% for now
+                current_pos = 100
+
+        # Convert HA (0-100) -> Hue (0-255)
+        hue_bri = int(current_pos * 255 / 100)
+        existing_state.brightness = hue_bri
+
+        # Power state: If not fully closed, it's ON
+        existing_state.power_state = current_pos > 0
+
+        return existing_state
+
+    async def async_execute(self, control_state: EntityState) -> None:
+        """Execute control state."""
+        if not control_state:
+            return
+
+        if not await self._async_update_allowed(control_state):
+            return
+
+        # Execute command based on state
+        if not control_state.power_state:
+            await self.ctl.controller_hass.call_service(
+                const.HASS_DOMAIN_COVER,
+                const.HASS_SERVICE_CLOSE_COVER,
+                {const.HASS_ATTR_ENTITY_ID: self._entity_id},
+            )
+        elif control_state.brightness is not None:
+            # Hue (0-255) -> HA (0-100)
+            pos = int(control_state.brightness * 100 / 255)
+            await self.ctl.controller_hass.call_service(
+                const.HASS_DOMAIN_COVER,
+                const.HASS_SERVICE_SET_COVER_POSITION,
+                {
+                    const.HASS_ATTR_ENTITY_ID: self._entity_id,
+                    const.HASS_ATTR_POSITION: pos,
+                },
+            )
+        else:
+            await self.ctl.controller_hass.call_service(
+                const.HASS_DOMAIN_COVER,
+                const.HASS_SERVICE_OPEN_COVER,
+                {const.HASS_ATTR_ENTITY_ID: self._entity_id},
+            )
+
+        await self._async_update_config_states(control_state)
+
+
 async def force_update_all():
     """Force all devices to receive an updated state after entertainment mode ends."""
     tasks = []
@@ -555,7 +640,7 @@ async def force_update_all():
 
 async def async_get_device(
     ctl: Controller, entity_id: str
-) -> OnOffDevice | BrightnessDevice | CTDevice | RGBDevice | RGBWWDevice:
+) -> OnOffDevice | BrightnessDevice | CTDevice | RGBDevice | RGBWWDevice | CoverDevice:
     """Infer light object type from Home Assistant state and returns corresponding object."""
     if entity_id in __device_cache:
         return __device_cache[entity_id][0]
@@ -612,6 +697,8 @@ async def async_get_device(
         device_obj = new_device_obj(CTDevice)
     elif const.HASS_COLOR_MODE_BRIGHTNESS in entity_color_modes:
         device_obj = new_device_obj(BrightnessDevice)
+    elif entity_id.startswith("cover."):
+        device_obj = new_device_obj(CoverDevice)
     else:
         device_obj = new_device_obj(OnOffDevice)
     await device_obj.async_update_state()

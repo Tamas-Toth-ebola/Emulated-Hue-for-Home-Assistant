@@ -36,10 +36,15 @@ def start_zeroconf_discovery(config: Config):
     zeroconf = Zeroconf(interfaces=InterfaceChoice.All)
     zeroconf_type = "_hue._tcp.local."
 
+    try:
+        address = socket.inet_pton(socket.AF_INET, config.advertise_ip)
+    except OSError:
+        address = socket.inet_pton(socket.AF_INET6, config.advertise_ip)
+
     info = ServiceInfo(
         zeroconf_type,
         name=f"Philips Hue - {config.bridge_id[-6:]}.{zeroconf_type}",
-        addresses=[get_ip_pton()],
+        addresses=[address],
         port=443,
         properties={
             "bridgeid": config.bridge_id,
@@ -62,6 +67,7 @@ class UPNPResponderThread(threading.Thread):
         self.daemon = True
 
         self.ip_addr = config.ip_addr
+        self.advertise_ip = config.advertise_ip
         self.upnp_bind_multicast = bind_multicast
 
         # Note that the double newline at the end of
@@ -70,7 +76,7 @@ class UPNPResponderThread(threading.Thread):
 HOST: 239.255.255.250:1900
 EXT:
 CACHE-CONTROL: max-age=100
-LOCATION: http://{ip_addr}:{port_num}/description.xml
+LOCATION: http://{advertise_ip}:{port_num}/description.xml
 SERVER: Hue/1.0 UPnP/1.0 IpBridge/1.48.0
 hue-bridgeid: {bridge_id}
 ST: {device_type}
@@ -80,7 +86,7 @@ USN: {bridge_uuid}
             "\n", "\r\n"
         )
         self._resp_format = resp_template.format(
-            ip_addr=config.ip_addr,
+            advertise_ip=self.advertise_ip,
             port_num=const.HUE_HTTP_PORT
             if config.use_default_ports
             else config.http_port,

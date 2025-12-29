@@ -8,9 +8,11 @@ Control all lights connected to your Home Assistant box with HUE compatible apps
 ## Features
 - Your Areas in Home Assistant will be auto created as rooms in the HUE app.
 - All your Home Assistant lights will be supported with full functionality.
+- **Smart Naming:** Devices are automatically prefixed with their Area name (e.g., "Kitchen Light") to avoid naming conflicts.
+- **Cover Support:** Support for covers/shutters (Open/Close/Position mapping).
 - Allow you to create your own HUE groups and scenes.
 - Secured connection and authentication flow (unlike default emulated hue component in hass).
-- Fully emulates a "V2" HUE bridge.
+- Fully emulates a "V2" HUE bridge with persistent Bridge ID (stable across Docker restarts).
 - Loosely coupled with HomeAssistant over low-latency websockets.
 - Experimental support for HUE Entertainment (see below).
 
@@ -36,6 +38,7 @@ Once started, it will be available as a HUE bridge on your network.
 - This virtual bridge runs at HTTP port 80 and HTTPS port 443 on your local network. These ports can not be changed as the HUE infrastructure requires them to be at these defaults.
 - If you're running the previous/legacy emulated HUE component in HASS, make sure to disable it first.
 - Remote Connection support is not available. This thing is local only (which is actually a good thing perhaps?).
+- **Docker Bridge Mode:** If running in Docker bridge mode, use the environment variable `EMULATED_HUE_ADVERTISE_IP` to specify your Host's LAN IP address. This ensures that the bridge advertises the correct IP to Hue clients.
 
 ## Notes on Philips HUE Entertainment API support
 The [Hue Entertainment API](https://developers.meethue.com/develop/hue-entertainment/philips-hue-entertainment-api/) supports a communication protocol which allows a light streaming functionality with the Philips Hue System. Using this protocol, it is possible to stream lighting effects to multiple lights in parallel with a high update rate. It's used for new Ambilight+HUE TV's and the HUE Sync app on PC and Mac.
@@ -46,11 +49,8 @@ The next step we have in mind is, if you own official HUE lights connected to ZH
 
 
 ## Backlog / TODO / Ideas:
-- Support other device types, like switches ?
+- Support for more device types (e.g., switches, fans).
 - Forward Entertainment UDP packages to Zigbee mesh for Official HUE lights that natively support the feature.
-- Read HASS scenes to HUE ?
-- Create HUE scenes, push to HASS scenes ?
-- Support for routines / automations ?
 
 Please use the Github issue tracker for feature requests (including motivation) and off course for reporting any issues you may find!
 

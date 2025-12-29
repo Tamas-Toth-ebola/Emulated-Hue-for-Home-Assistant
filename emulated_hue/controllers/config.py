@@ -54,6 +54,13 @@ class Config:
         self._ip_addr = get_local_ip()
         LOGGER.info("Auto detected listen IP address is %s", self.ip_addr)
 
+        # Feature: Advertise IP Override.
+        # If EMULATED_HUE_ADVERTISE_IP is set in environment, use it for discovery (SSDP/description.xml).
+        # Useful when running in Docker bridge mode.
+        self._advertise_ip = os.getenv("EMULATED_HUE_ADVERTISE_IP", self._ip_addr)
+        if self._advertise_ip != self._ip_addr:
+            LOGGER.info("Using EMULATED_HUE_ADVERTISE_IP override: %s", self._advertise_ip)
+
         # Get the ports that the Hue bridge will listen on
         # ports can be overridden but Hue apps expect ports 80/443
         # so this is only usefull when running a reverse proxy on the same host
@@ -71,13 +78,27 @@ class Config:
                     "Are you using a reverse proxy?"
                 )
 
-        mac_addr = str(get_mac_address(ip=self.ip_addr))
-        if not mac_addr or len(mac_addr) < 16:
-            # try again without ip
-            mac_addr = str(get_mac_address())
-        if not mac_addr or len(mac_addr) < 16:
-            # fall back to dummy mac
-            mac_addr = "b6:82:d3:45:ac:29"
+        # Get the MAC address (from config or interface)
+        # Fix: In Docker environments, the MAC address changes on container recreation,
+        # causing the Bridge ID to change and requiring re-pairing.
+        # We now persist the MAC address in the config after the first run.
+        if not self._config.get("bridge_config"):
+            self._config["bridge_config"] = {}
+
+        mac_addr = self._config["bridge_config"].get("mac_addr")
+
+        if not mac_addr:
+            # no mac in config, detect from interface
+            mac_addr = str(get_mac_address(ip=self.ip_addr))
+            if not mac_addr or len(mac_addr) < 16:
+                # try again without ip
+                mac_addr = str(get_mac_address())
+            if not mac_addr or len(mac_addr) < 16:
+                # fall back to dummy mac
+                mac_addr = "b6:82:d3:45:ac:29"
+            # save to config
+            self._config["bridge_config"]["mac_addr"] = mac_addr
+
         self._mac_addr = mac_addr
         mac_str = mac_addr.replace(":", "")
         self._bridge_id = (mac_str[:6] + "FFFE" + mac_str[6:]).upper()
@@ -109,6 +130,11 @@ class Config:
     def ip_addr(self) -> str:
         """Return ip address of the emulated bridge."""
         return self._ip_addr
+
+    @property
+    def advertise_ip(self) -> str:
+        """Return the advertised ip address of the emulated bridge."""
+        return self._advertise_ip
 
     @property
     def mac_addr(self) -> str:
@@ -182,11 +208,24 @@ class Config:
             unique_id[12:14],
             unique_id[14:16],
         )
+
+        # Generate default name with Area prefix
+        # Feature: Smart Naming. Prepend the Area name to the entity name if available
+        # to distinguish devices with the same name in different rooms.
+        area_name = self.ctl.controller_hass.get_area_name(entity_id)
+        entity_state = self.ctl.controller_hass.get_entity_state(entity_id)
+        friendly_name = entity_state.get("attributes", {}).get("friendly_name", entity_id)
+
+        if area_name:
+            name = f"{area_name} {friendly_name}"
+        else:
+            name = friendly_name
+
         # create default light config
         light_config = {
             "entity_id": entity_id,
             "enabled": True,
-            "name": "",
+            "name": name,
             "uniqueid": unique_id,
             # TODO: detect type of light from hass device config ?
             "config": {

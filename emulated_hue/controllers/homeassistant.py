@@ -56,6 +56,24 @@ class HomeAssistantController(HomeAssistantClient):
         """Get the device ID from an entity ID."""
         return self.entity_registry.get(entity_id, {}).get("device_id")
 
+    def get_area_name(self, entity_id: str) -> str | None:
+        """Get the area name for an entity."""
+        entity = self.entity_registry.get(entity_id)
+        if not entity:
+            return None
+        area_id = entity.get("area_id")
+        if not area_id:
+            device_id = entity.get("device_id")
+            if device_id:
+                device = self.device_registry.get(device_id)
+                if device:
+                    area_id = device.get("area_id")
+        if area_id:
+            area = self.area_registry.get(area_id)
+            if area:
+                return area.get("name")
+        return None
+
     async def async_create_notification(
         self,
         msg: str,
@@ -105,16 +123,24 @@ class HomeAssistantController(HomeAssistantClient):
             callback, event_filter="state_changed", entity_filter=entity_id
         )
 
-    def get_entities(self, domain: str = "light") -> list[str]:
+    def get_entities(self, domains: list[str] | str = None) -> list[str]:
         """
-        Get entity_ids of a domain in Home Assistant.
+        Get entity_ids of domains in Home Assistant.
 
-            :param domain: The domain of the entities.
+            :param domains: The domain(s) of the entities. Defaults to ["light", "cover"].
             :return: A list of entity IDs.
         """
-        return [
-            entity["entity_id"] for entity in self.items_by_domain(domain) if entity
-        ]
+        if domains is None:
+            domains = ["light", "cover"]
+        if isinstance(domains, str):
+            domains = [domains]
+
+        entity_ids = []
+        for domain in domains:
+            entity_ids.extend(
+                [entity["entity_id"] for entity in self.items_by_domain(domain) if entity]
+            )
+        return entity_ids
 
     async def async_get_area_entities(
         self, domain_filter: list | None = None
