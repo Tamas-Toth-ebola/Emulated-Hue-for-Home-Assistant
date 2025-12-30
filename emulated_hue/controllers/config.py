@@ -215,23 +215,11 @@ class Config:
             unique_id[14:16],
         )
 
-        # Generate default name with Area prefix
-        # Feature: Smart Naming. Prepend the Area name to the entity name if available
-        # to distinguish devices with the same name in different rooms.
-        area_name = self.ctl.controller_hass.get_area_name(entity_id)
-        entity_state = self.ctl.controller_hass.get_entity_state(entity_id)
-        friendly_name = entity_state.get("attributes", {}).get("friendly_name", entity_id)
-
-        if area_name:
-            name = f"{area_name} {friendly_name}"
-        else:
-            name = friendly_name
-
         # create default light config
         light_config = {
             "entity_id": entity_id,
             "enabled": True,
-            "name": name,
+            "name": "",
             "uniqueid": unique_id,
             # TODO: detect type of light from hass device config ?
             "config": {

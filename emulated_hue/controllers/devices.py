@@ -249,9 +249,51 @@ class OnOffDevice:
     @property
     def name(self) -> str:
         """Return device name, prioritizing local config."""
-        return self._name or self._hass_state_dict.get(const.HASS_ATTR, {}).get(
-            "friendly_name"
+        if self._name:
+            return self._name
+
+        # Feature: Smart Naming. Prepend the Area name to the entity name if available.
+        # Format: {Area} - {Entity} with Title Case and deduplication.
+        area_name = self.ctl.controller_hass.get_area_name(self._entity_id)
+        friendly_name = self._hass_state_dict.get(const.HASS_ATTR, {}).get(
+            "friendly_name", self._entity_id
         )
+
+        def title_case(text: str) -> str:
+            return " ".join([w.capitalize() for w in text.split()])
+
+        if area_name:
+            area_name_tc = title_case(area_name)
+            area_words = area_name.lower().split()
+
+            # 1. Deduplicate Area Name: remove area name if it exists as a whole string (regex)
+            import re
+            re_area = re.compile(re.escape(area_name), re.IGNORECASE)
+            friendly_name = re_area.sub("", friendly_name).strip()
+
+            # 2. Word-level deduplication: remove words that are already in the Area name
+            # and collapse consecutive duplicate words
+            friendly_words = friendly_name.split()
+            cleaned_words = []
+            for word in friendly_words:
+                clean_word = word.strip("-").strip()
+                if not clean_word:
+                    continue
+                # Skip if word is already in Area name (case-insensitive)
+                if clean_word.lower() in area_words:
+                    continue
+                # Skip if it's a consecutive duplicate (case-insensitive)
+                if cleaned_words and clean_word.lower() == cleaned_words[-1].lower():
+                    continue
+                cleaned_words.append(clean_word)
+
+            friendly_name_tc = title_case(" ".join(cleaned_words))
+
+            if not friendly_name_tc:
+                return area_name_tc
+            return f"{area_name_tc} - {friendly_name_tc}"
+
+        return title_case(friendly_name)
 
     @name.setter
     def name(self, value: str) -> None:
@@ -697,8 +739,15 @@ async def async_get_device(
         device_obj = new_device_obj(CTDevice)
     elif const.HASS_COLOR_MODE_BRIGHTNESS in entity_color_modes:
         device_obj = new_device_obj(BrightnessDevice)
+    elif entity_id.startswith("light."):
+        # Fallback for lights that don't advertise color modes (e.g. template lights)
+        # We treat them as BrightnessDevice so they appear as Lights (0x0100) instead of Plugs (0x0000)
+        device_obj = new_device_obj(BrightnessDevice)
     elif entity_id.startswith("cover."):
         device_obj = new_device_obj(CoverDevice)
+    elif entity_id.startswith("switch."):
+        # Switches are exposed as basic OnOffDevice, which clients like Harmony see as Plugs
+        device_obj = new_device_obj(OnOffDevice)
     else:
         device_obj = new_device_obj(OnOffDevice)
     await device_obj.async_update_state()

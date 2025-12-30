@@ -126,37 +126,56 @@ class HomeAssistantController(HomeAssistantClient):
     def get_entities(self, domains: list[str] | str = None) -> list[str]:
         """
         Get entity_ids of domains in Home Assistant.
+        Excludes disabled and hidden entities.
 
-            :param domains: The domain(s) of the entities. Defaults to ["light", "cover"].
+            :param domains: The domain(s) of the entities. Defaults to ["light", "cover", "switch"].
             :return: A list of entity IDs.
         """
         if domains is None:
-            domains = ["light", "cover"]
+            domains = ["light", "cover", "switch"]
         if isinstance(domains, str):
             domains = [domains]
 
         entity_ids = []
-        for domain in domains:
-            entity_ids.extend(
-                [entity["entity_id"] for entity in self.items_by_domain(domain) if entity]
-            )
+        # Iterate directly over the entity registry to ensure we catch all metadata correctly
+        for entity in self.entity_registry.values():
+            if not entity:
+                continue
+            
+            ent_id = entity["entity_id"]
+            
+            # Check if domain matches
+            match = False
+            for d in domains:
+                if ent_id.startswith(f"{d}."):
+                    match = True
+                    break
+            
+            if not match:
+                continue
+
+            # Exclude disabled and hidden entities
+            if entity.get("disabled_by") or entity.get("hidden_by"):
+                continue
+                
+            entity_ids.append(ent_id)
         return entity_ids
 
     async def async_get_area_entities(
         self, domain_filter: list | None = None
     ) -> dict[str, dict]:
         """
-        Get all areas mapped to entities contained. Excludes disabled entities.
+        Get all areas mapped to entities contained. Excludes disabled and hidden entities.
 
             :return: A dictionary of devices in the area. {area_id: {name: str, entities:[entity_ids]}}
         """
-        domain_filter = domain_filter if domain_filter else ["light."]
+        domain_filter = domain_filter if domain_filter else ["light.", "switch."]
         result = self.area_registry.copy()
         for area_id in result:
             area_entities = []
             for entity in self.entity_registry.values():
-                if entity["disabled_by"]:
-                    # do not include disabled devices
+                if entity.get("disabled_by") or entity.get("hidden_by"):
+                    # do not include disabled or hidden devices
                     continue
                 # only include devices that are matched by the filter
                 if domain_filter and not any(

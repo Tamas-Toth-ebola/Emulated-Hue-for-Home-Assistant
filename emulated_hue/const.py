@@ -52,6 +52,7 @@ HASS_STATE_OFF = "off"
 HASS_STATE_ON = "on"
 HASS_STATE_UNAVAILABLE = "unavailable"
 HASS_DOMAIN_LIGHT = "light"
+HASS_DOMAIN_SWITCH = "switch"
 
 HASS_ATTR_BRI_MIN = 1  # Brightness
 
