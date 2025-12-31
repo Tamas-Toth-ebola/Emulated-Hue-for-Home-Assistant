@@ -34,7 +34,7 @@ Control all devices connected to your Home Assistant with Hue compatible apps/de
 - **Compatible Device Types:**
   - **Switches:** Exposed as Smart Plugs.
   - **Lights:** Supports all Home Assistant light features.
-  - **Covers/Shutters:** Works as inverted lights (brightness maps to position).
+  - **Covers/Shutters:** Works as inverted lights _(brightness maps to position)_.
 
 ## Setup
 ### Home Assistant OS / Supervised (Add-on)
@@ -45,20 +45,20 @@ Control all devices connected to your Home Assistant with Hue compatible apps/de
 ### Home Assistant Core / Docker (Standalone)
 If you're a Docker ninja 🥷, you can run this as a standalone container. Since we're still in the "garage phase" 🔧, you'll need to build the image locally for now.
 
-1. Clone this repo to your RPi (or whatever you're running).
-2. Build the image:
+1. Clone this repo to your 'Home Assistant server' _(rPI or whatever you're running)_.
+2. Build the image _(care the 'arch' attribute!)_:
    ```bash
    docker build -t emulated-hue:local -f docker/Dockerfile --build-arg HASS_ARCH=aarch64 .
    ```
-3. Fire it up with Docker Compose (see `compose.example.yaml` for a head start).
+3. Fire it up with Docker Compose _(see `compose.example.yaml` for a head start)_.
 
 #### Parameters
 | Variable | Description |
 | :--- | :--- |
-| `HASS_URL` | The URL of your Home Assistant instance (e.g., `http://10.20.30.50:8123`). |
+| `HASS_URL` | The URL of your Home Assistant instance _(e.g., `http://10.20.30.1:8123`)_. |
 | `HASSIO_TOKEN` | A Long-Lived Access Token generated in HA. |
 | `EMULATED_HUE_ADVERTISE_IP` | **Mandatory for Bridge Mode!** Set this to your Host's LAN IP. |
-| `EMULATED_HUE_FORCE_LINK_MODE` | (Optional) Set to `true` to keep pairing mode always open. Use with care! |
+| `EMULATED_HUE_FORCE_LINK_MODE` | _(Optional)_ Set to `true` to keep pairing mode always open. Use with care! |
 
 ## Connect (to the virtual Hue Bridge)
 1. Search for Hue Bridges in your app _(e.g., Logitech Harmony or official Hue app)_.
@@ -70,8 +70,8 @@ If you're a Docker ninja 🥷, you can run this as a standalone container. Since
 ## How the Magic Happens (Naming Logic) 🎩✨
 Tired of seeing "Light 1", "Light 2" and having no clue which is which? We got you!
 The bridge uses **Smart Naming** to keep things tidy:
-- **Format:** `{Area} - {Entity Name}` (e.g., *Kitchen - Cupboard Light*).
-- **Auto-Cleanup:** If your entity name already contains the area (like "Kitchen Light" in "Kitchen"), we intelligently strip the duplicate to avoid "Kitchen - Kitchen Light" silliness.
+- **Format:** `{Area} - {Entity Name}` _(e.g., *Kitchen - Cupboard Light*)_.
+- **Auto-Cleanup:** If your entity name already contains the area _(like "Kitchen Light" in "Kitchen")_, we intelligently strip the duplicate to avoid "Kitchen - Kitchen Light" silliness.
 - **Title Case:** Everything is automatically converted to Title Case for that premium look. 💅
 
 ## Important Notes
@@ -79,21 +79,21 @@ The bridge uses **Smart Naming** to keep things tidy:
 - **Ports:** This bridge requires HTTP port 80 and HTTPS port 443. These are hardcoded requirements of the Hue protocol.
 - **Docker Network:**
   - The simplest way is to use `host` network mode.
-  - For the privacy-conscious, **custom bridge networks work too!** 🛡️ Just make sure you have an SSDP/multicast relay (like `multicast-relay` or `avahi`) running between your host and the container, and don't forget to set `EMULATED_HUE_ADVERTISE_IP`.
+  - For the privacy-conscious, **custom bridge networks work too!** 🛡️ Just make sure you have an SSDP/multicast relay _(like `multicast-relay` or `avahi`)_ running between your host and the container, and don't forget to set `EMULATED_HUE_ADVERTISE_IP`.
 
 ## Notes on Philips Hue Entertainment API support
 The [Hue Entertainment API](https://developers.meethue.com/develop/hue-entertainment/philips-hue-entertainment-api/) allows high-speed light streaming. Our implementation translates these packets into Home Assistant commands. While functional, it is highly experimental and subject to platform throttling. Expect some lag unless you have a beast of a machine! 🚀
 
 ## Ideas for Future Development
-- **Dynamic Refresh:** Trigger device list updates without restarting the container (via HA Webhook or API).
-- **Integration Labeling:** Smart suffixes to distinguish between devices from different platforms (e.g., Zigbee vs. Wi-Fi).
+- **Dynamic Refresh:** Trigger device list updates without restarting the container _(via HA Webhook or API)_.
+- **Integration Labeling:** Smart suffixes to distinguish between devices from different platforms _(e.g., Zigbee vs. Wi-Fi)_.
 - **Native Forwarding:** Native Entertainment packet forwarding for Zigbee-native Hue lights.
 
 ## Credits & Contributors 🏆
 Massive thanks to everyone who helped bring this project to life!
 
 - [**Google - Gemini**](https://gemini.google.com/) ♊: The AI mastermind behind refactoring, Pydantic V2 compatibility, and network isolation fixes.
-- [**ebola**](https://github.com/Tamas-Toth-ebola): Just a fan who tries to keep the solution up-to-date, his RPi's humming and the code clean.
+- [**ebola**](https://github.com/Tamas-Toth-ebola): Just a fan who tries to keep the solution up-to-date as his RPi's humming and the code clean.
 - [**hass-emulated-hue/core**](https://github.com/hass-emulated-hue/core): The original upstream project that provided the solid foundation.
 
 ---
